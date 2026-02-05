@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Friday 控制台</title>
+    <style>
+        body { background-color: #121212; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+        
+        .video-box { background: #000; border-radius: 12px; overflow: hidden; position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        img#stream { width: 100%; display: block; }
+        
+        .chat-box { background: #1e1e1e; border-radius: 12px; height: 500px; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .msg { padding: 10px 15px; border-radius: 10px; max-width: 80%; line-height: 1.4; }
+        .msg.user { align-self: flex-end; background: #0056b3; color: #fff; }
+        .msg.friday { align-self: flex-start; background: #333; border: 1px solid #444; }
+        .timestamp { font-size: 0.8em; color: #888; margin-bottom: 2px; }
+
+        .controls { grid-column: 1 / -1; display: flex; gap: 20px; align-items: center; background: #1e1e1e; padding: 20px; border-radius: 12px; }
+        button { background: #d32f2f; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #b71c1c; }
+        
+        .gallery { grid-column: 1 / -1; display: flex; gap: 15px; overflow-x: auto; padding: 10px 0; }
+        .photo-card { min-width: 200px; background: #222; padding: 5px; border-radius: 8px; text-align: center; border: 1px solid #333; }
+        .photo-card img { width: 100%; border-radius: 5px; height: 150px; object-fit: cover; }
+        .photo-card span { display: block; margin-top: 5px; font-size: 0.8em; color: #aaa; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="video-box">
+        <img id="stream" src="/video_feed" alt="Camera Offline">
+        <div style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 4px; font-size: 12px; color: #0f0;">● 实时监控中</div>
+    </div>
+
+    <div class="chat-box" id="chatBox">
+        <div class="msg friday">System: 等待连接...</div>
+    </div>
+
+    <div class="controls">
+        <button onclick="takePhoto()">📸 手动拍照</button>
+        <div style="margin-left: auto; color: #666;">语音指令: "拍照", "看看这是什么"</div>
+    </div>
+
+    <div class="gallery" id="gallery">
+        </div>
+</div>
+
+<script>
+    let lastPhotoId = "";
+
+    // 1. 全局轮询 (每秒同步一次 聊天记录 + 最新照片)
+    setInterval(() => {
+        fetch('/get_status')
+            .then(r => r.json())
+            .then(data => {
+                // A. 同步聊天记录
+                const box = document.getElementById('chatBox');
+                if (data.chat_log.length > box.childElementCount - 1) { 
+                    box.innerHTML = '<div class="msg friday">System: Friday 已上线</div>';
+                    data.chat_log.forEach(msg => {
+                        const div = document.createElement('div');
+                        div.className = `msg ${msg.role === 'user' ? 'user' : 'friday'}`;
+                        div.innerHTML = `<div class="timestamp">${msg.time}</div>${msg.content}`;
+                        box.appendChild(div);
+                    });
+                    box.scrollTop = box.scrollHeight;
+                }
+
+                // B. 同步最新照片 (核心修复)
+                // 如果服务器有了新照片，且和我当前显示的最后一张不一样，就添加进来
+                if (data.latest_photo && data.latest_photo.id !== lastPhotoId) {
+                    console.log("检测到新照片:", data.latest_photo);
+                    addPhotoToGallery(data.latest_photo.url, data.latest_photo.time);
+                    lastPhotoId = data.latest_photo.id; // 更新标记，防止重复添加
+                }
+            });
+    }, 1000);
+
+    // 手动拍照按钮
+    function takePhoto() {
+        fetch('/capture_photo', { method: 'POST' });
+        // 不需要在这里处理结果了，因为上面的轮询会自动把新照片刷出来
+    }
+
+    function addPhotoToGallery(url, time) {
+        const g = document.getElementById('gallery');
+        const div = document.createElement('div');
+        div.className = 'photo-card';
+        // 点击查看大图
+        div.innerHTML = `<a href="${url}" target="_blank"><img src="${url}"></a><span>${time}</span>`;
+        g.prepend(div); // 插入到最前面
+    }
+</script>
+
+</body>
+</html>
